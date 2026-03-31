@@ -1,0 +1,19 @@
+import cv2
+import os
+
+image_path = "test_station.jpg"   # change this to your real file name
+
+print("Current working directory:", os.getcwd())
+print("Image path exists:", os.path.exists(image_path))
+
+image = cv2.imread(image_path)
+
+if image is None:
+    print("Error: OpenCV could not read the image.")
+    print("Check the file name, extension, and location.")
+else:
+    print("Image loaded successfully.")
+    print("Image shape:", image.shape)
+    cv2.imshow("Image", image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
