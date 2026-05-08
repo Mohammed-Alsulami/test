@@ -22,7 +22,7 @@ export default function HomePage() {
   };
 
   const handleAnalyse = async () => {
-    if (!file) return alert("Upload an image first");
+    if (!file) return alert("Upload an image or video first");
 
     setLoading(true);
     setError(null);
@@ -31,13 +31,16 @@ export default function HomePage() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("https://accessibility-backend.onrender.com/analyze"), {
+      const res = await fetch("https://accessibility-backend.onrender.com/analyze", {
         method: "POST",
         body: formData,
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Analysis failed");
+
+      if (!res.ok) {
+        throw new Error(data.detail || "Analysis failed");
+      }
 
       setReport(data);
     } catch (err) {
@@ -53,7 +56,7 @@ export default function HomePage() {
       {/* HEADER */}
       <header style={styles.header}>
         <div style={styles.headerInner}>
-          <img src="/white-logo.png" alt="" style={styles.logo} />
+          <img src="/white-logo.png" alt="Accessibility Audit AI logo" style={styles.logo} />
           <div style={styles.title}>Accessibility Audit AI</div>
         </div>
       </header>
@@ -63,15 +66,25 @@ export default function HomePage() {
 
         <section style={styles.card}>
           <h2 style={styles.h2}>Analyse Infrastructure</h2>
-          <p style={styles.subtext}>Upload an image in order to identify tactile flooring and assess it's compliance with DSAPT standards.</p>
+          <p style={styles.subtext}>
+            Upload an image or video in order to identify tactile flooring and assess its compliance with DSAPT standards.
+          </p>
 
           <div onClick={handleUploadClick} style={styles.uploadBox}>
-            <input ref={fileInputRef} type="file" hidden onChange={handleFileChange} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              hidden
+              accept="image/*,video/*"
+              onChange={handleFileChange}
+            />
 
             {!preview ? (
-              <div style={styles.uploadState}>Click to upload image</div>
+              <div style={styles.uploadState}>Click to upload image or video</div>
+            ) : file?.type?.startsWith("video/") ? (
+              <video src={preview} controls style={styles.preview} />
             ) : (
-              <img src={preview} alt="" style={styles.preview} />
+              <img src={preview} alt="Uploaded preview" style={styles.preview} />
             )}
           </div>
 
@@ -85,7 +98,9 @@ export default function HomePage() {
         {report && (
           <section style={styles.card}>
             <h2 style={styles.h2}>Results</h2>
-            <pre style={{ fontSize: 13 }}>{JSON.stringify(report, null, 2)}</pre>
+            <pre style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>
+              {JSON.stringify(report, null, 2)}
+            </pre>
           </section>
         )}
 
@@ -93,13 +108,12 @@ export default function HomePage() {
           <h2 style={styles.h2}>About this project</h2>
           <p style={styles.subtext}>
             This project was developed as part of a university initiative focused on applying AI to real-world accessibility challenges. It reflects a commitment to improving accessibility and supporting people with disabilities, with the broader aim of contributing to more inclusive public spaces. In this context, the project explores how technology can support greater independence and inclusion in everyday travel.
-            <br/>
-            <br/>
+            <br />
+            <br />
             The system is a proof-of-concept tool that uses computer vision to analyse public transport infrastructure and identify accessibility features and potential barriers. By processing images or video, it generates a structured, human-readable report to assist with accessibility assessment.
-            <br/>
-            <br/>
+            <br />
+            <br />
             As an early-stage prototype, the system has a number of limitations. Detection accuracy is influenced by factors such as image quality, lighting, and camera angles. In addition, some features may still require manual verification, and the tool is not intended to replace formal compliance assessments.
-            
           </p>
         </section>
 
@@ -110,7 +124,8 @@ export default function HomePage() {
         <div style={styles.footerInner}>
           <div style={styles.footerTitle}>About us</div>
           <div style={styles.footerText}>
-          This project was developed by a small team of university students passionate about accessibility and inclusive design. Combining skills in AI, computer vision, and software development, the team set out to explore practical ways technology can improve everyday public transport experiences. Their goal is to create tools that support greater independence and accessibility for all users.          </div>
+            This project was developed by a small team of university students passionate about accessibility and inclusive design. Combining skills in AI, computer vision, and software development, the team set out to explore practical ways technology can improve everyday public transport experiences. Their goal is to create tools that support greater independence and accessibility for all users.
+          </div>
         </div>
       </footer>
 
@@ -127,7 +142,6 @@ const styles = {
     overflowX: "hidden",
   },
 
-  /* DARK GREY HEADER */
   header: {
     background: "#212121",
     color: "#fff",
@@ -195,7 +209,9 @@ const styles = {
     overflow: "hidden",
   },
 
-  uploadState: { color: "#64748b" },
+  uploadState: {
+    color: "#64748b",
+  },
 
   preview: {
     width: "100%",
@@ -223,7 +239,6 @@ const styles = {
     borderRadius: 10,
   },
 
-  /* DARK GREY FOOTER */
   footer: {
     marginTop: 30,
     background: "#212121",
