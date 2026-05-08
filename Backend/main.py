@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
 
-from function import run_model   # change run_model if your function name is different
+from Function import run_model   # change run_model if your function name is different
 
 
 app = FastAPI()
