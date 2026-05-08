@@ -5,6 +5,7 @@ torch
 torchvision
 numpy
 pillow
-opencv-python-headlessmatplotlib
+opencv-python-headless
+matplotlib
 reportlab
 pdfrw
