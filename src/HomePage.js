@@ -9,23 +9,30 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleUploadClick = () => fileInputRef.current.click();
+  const handleUploadClick = () => {
+    fileInputRef.current.click();
+  };
 
   const handleFileChange = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
+    const selectedFile = e.target.files?.[0];
 
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
+    if (!selectedFile) return;
+
+    setFile(selectedFile);
+    setPreview(URL.createObjectURL(selectedFile));
     setReport(null);
     setError(null);
   };
 
   const handleAnalyse = async () => {
-    if (!file) return alert("Upload an image or video first");
+    if (!file) {
+      alert("Upload an image or video first");
+      return;
+    }
 
     setLoading(true);
     setError(null);
+    setReport(null);
 
     try {
       const formData = new FormData();
@@ -44,15 +51,14 @@ export default function HomePage() {
 
       setReport(data);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Something went wrong");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
     <div style={styles.page}>
-
       {/* HEADER */}
       <header style={styles.header}>
         <div style={styles.headerInner}>
@@ -63,9 +69,9 @@ export default function HomePage() {
 
       {/* MAIN */}
       <main style={styles.container}>
-
         <section style={styles.card}>
           <h2 style={styles.h2}>Analyse Infrastructure</h2>
+
           <p style={styles.subtext}>
             Upload an image or video in order to identify tactile flooring and assess its compliance with DSAPT standards.
           </p>
@@ -98,14 +104,45 @@ export default function HomePage() {
         {report && (
           <section style={styles.card}>
             <h2 style={styles.h2}>Results</h2>
-            <pre style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>
-              {JSON.stringify(report, null, 2)}
-            </pre>
+
+            <p style={styles.resultText}>
+              <strong>Tactile detected:</strong> {report.tactile_detected}
+            </p>
+
+            <p style={styles.resultText}>
+              <strong>DSAPT score:</strong> {report.dsapt_compliance_score}%
+            </p>
+
+            <p style={styles.resultText}>
+              <strong>Compatibility:</strong> {report.dsapt_compatibility_label}
+            </p>
+
+            <p style={styles.resultText}>
+              <strong>Contrast:</strong> {report.contrast_percentage}%
+            </p>
+
+            {report.notes && (
+              <p style={styles.subtext}>
+                <strong>Notes:</strong> {report.notes}
+              </p>
+            )}
+
+            {report.report_filename && (
+              <a
+                href={`https://accessibility-backend-grzg.onrender.com/download-report/${report.report_filename}`}
+                target="_blank"
+                rel="noreferrer"
+                style={styles.downloadLink}
+              >
+                Download PDF Report
+              </a>
+            )}
           </section>
         )}
 
         <section style={styles.card}>
           <h2 style={styles.h2}>About this project</h2>
+
           <p style={styles.subtext}>
             This project was developed as part of a university initiative focused on applying AI to real-world accessibility challenges. It reflects a commitment to improving accessibility and supporting people with disabilities, with the broader aim of contributing to more inclusive public spaces. In this context, the project explores how technology can support greater independence and inclusion in everyday travel.
             <br />
@@ -116,19 +153,18 @@ export default function HomePage() {
             As an early-stage prototype, the system has a number of limitations. Detection accuracy is influenced by factors such as image quality, lighting, and camera angles. In addition, some features may still require manual verification, and the tool is not intended to replace formal compliance assessments.
           </p>
         </section>
-
       </main>
 
       {/* FOOTER */}
       <footer style={styles.footer}>
         <div style={styles.footerInner}>
           <div style={styles.footerTitle}>About us</div>
+
           <div style={styles.footerText}>
             This project was developed by a small team of university students passionate about accessibility and inclusive design. Combining skills in AI, computer vision, and software development, the team set out to explore practical ways technology can improve everyday public transport experiences. Their goal is to create tools that support greater independence and accessibility for all users.
           </div>
         </div>
       </footer>
-
     </div>
   );
 }
@@ -237,6 +273,24 @@ const styles = {
     color: "#b91c1c",
     padding: 10,
     borderRadius: 10,
+  },
+
+  resultText: {
+    fontSize: 14.5,
+    color: "#374151",
+    lineHeight: 1.6,
+    margin: "6px 0",
+  },
+
+  downloadLink: {
+    display: "inline-block",
+    marginTop: 12,
+    padding: "10px 14px",
+    background: "#16a34a",
+    color: "#ffffff",
+    borderRadius: 10,
+    textDecoration: "none",
+    fontWeight: 600,
   },
 
   footer: {
