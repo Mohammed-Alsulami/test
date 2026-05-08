@@ -1,28 +1,36 @@
+import os
+import shutil
+
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-import shutil
-import os
-
-from Function import run_model   # change run_model if your function name is different
-
+from fastapi.responses import FileResponse
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # later replace with your GitHub Pages URL
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+UPLOAD_FOLDER = "uploads"
+OUTPUT_FOLDER = "outputs"
+
+
+@app.get("/")
+def home():
+    return {"message": "Backend is running"}
+
 
 @app.post("/analyze")
 async def analyze_file(file: UploadFile = File(...)):
-    upload_folder = "uploads"
-    os.makedirs(upload_folder, exist_ok=True)
+    from function import run_model
 
-    file_path = os.path.join(upload_folder, file.filename)
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -30,3 +38,17 @@ async def analyze_file(file: UploadFile = File(...)):
     result = run_model(file_path)
 
     return result
+
+
+@app.get("/download-report/{report_filename}")
+def download_report(report_filename: str):
+    report_path = os.path.join(OUTPUT_FOLDER, report_filename)
+
+    if not os.path.exists(report_path):
+        return {"error": "Report not found"}
+
+    return FileResponse(
+        report_path,
+        media_type="application/pdf",
+        filename=report_filename
+    )
