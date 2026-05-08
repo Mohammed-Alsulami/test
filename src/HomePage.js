@@ -31,7 +31,7 @@ export default function HomePage() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("https://accessibility-backend.onrender.com/analyze", {
+      const res = await fetch("https://accessibility-backend-grzg.onrender.com/analyze", {
         method: "POST",
         body: formData,
       });
