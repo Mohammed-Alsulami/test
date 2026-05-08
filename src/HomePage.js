@@ -53,7 +53,7 @@ export default function HomePage() {
       {/* HEADER */}
       <header style={styles.header}>
         <div style={styles.headerInner}>
-          <img src="/white-logo.png" style={styles.logo} />
+          <img src="/white-logo.png" alt="" style={styles.logo} />
           <div style={styles.title}>Accessibility Audit AI</div>
         </div>
       </header>
@@ -71,7 +71,7 @@ export default function HomePage() {
             {!preview ? (
               <div style={styles.uploadState}>Click to upload image</div>
             ) : (
-              <img src={preview} style={styles.preview} />
+              <img src={preview} alt="" style={styles.preview} />
             )}
           </div>
 
