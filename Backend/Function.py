@@ -1,56 +1,61 @@
 from datetime import datetime
 import os
 import time
+import uuid
+
 import cv2
 import numpy as np
 import torch
 from PIL import Image
 from torchvision import transforms
-import matplotlib.pyplot as plt
 
 from src import GRFBUNet
 
 
-# USER SETTINGS - CHANGE THESE ONLY
+# PATH SETTINGS
 
-INPUT_PATH = '/Users/mohammed-alsulami/Documents/GitHub/CV-Accessibility-of-Public-Transport/Sprint-3 Model/Test Model img-vids/test1.mp4'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-MODEL_PATH = "/Users/mohammed-alsulami/Documents/GitHub/CV-Accessibility-of-Public-Transport/Sprint-3 Model/Model/model.pth"
-
-TEMPLATE_PATH = '/Users/mohammed-alsulami/Documents/GitHub/CV-Accessibility-of-Public-Transport/Sprint-3 Model/Report_Template.pdf'
-
-OUTPUT_PDF_PATH = "/Users/mohammed-alsulami/Documents/GitHub/CV-Accessibility-of-Public-Transport/Sprint-3 Model/output_report.pdf"
+MODEL_PATH = os.path.join(BASE_DIR, "model", "model.pth")
+TEMPLATE_PATH = os.path.join(BASE_DIR, "report_template.pdf")
+OUTPUT_FOLDER = os.path.join(BASE_DIR, "outputs")
 
 THRESHOLD = 500
 
 FRAME_INTERVAL_SECONDS = 1
 MAX_VIDEO_SECONDS = 10
 
-# DSAPT contrast levels
+
+# DSAPT CONTRAST LEVELS
+
 DSAPT_MIN_CONTRAST = 30
 DSAPT_MEDIUM_CONTRAST = 45
 DSAPT_HIGH_CONTRAST = 60
 
-# PDF text position for accessibility feature
-# If the text appears in the wrong place, only adjust this Y value.
+
+# PDF TEXT POSITION
+
 ACCESSIBILITY_FEATURE_X = 205.33
 ACCESSIBILITY_FEATURE_Y = 345
 
 
-# Load Model
+# LOAD MODEL
+
 def load_model(model_path, device):
     classes = 1
     model = GRFBUNet(in_channels=3, num_classes=classes + 1, base_c=32)
 
-    checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint["model"])
+
     model.to(device)
     model.eval()
 
     return model
 
 
-# Preprocess Image
+# PREPROCESS IMAGE
+
 def preprocess_image(image):
     mean = (0.709, 0.381, 0.224)
     std = (0.127, 0.079, 0.043)
@@ -64,7 +69,8 @@ def preprocess_image(image):
     return transform(image)
 
 
-# Create Overlay
+# CREATE OVERLAY
+
 def create_overlay(original_img, prediction_mask):
     orig_np = np.array(original_img).copy()
     mask_np = np.array(prediction_mask)
@@ -79,35 +85,27 @@ def create_overlay(original_img, prediction_mask):
     return blended
 
 
-# Check Frame Quality
-def get_frame_quality_score(frame):
-    """
-    Higher score means better frame.
-    This checks:
-    1. Brightness
-    2. Sharpness / blur
-    """
+# FRAME QUALITY CHECK
 
+def get_frame_quality_score(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     brightness = np.mean(gray)
     blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
 
-    # Reject very dark frames
     if brightness < 50:
         return 0
 
-    # Reject very blurry frames
     if blur_score < 100:
         return 0
 
-    # Combined quality score
     quality_score = brightness + blur_score
 
     return quality_score
 
 
-# Run Model on One Image
+# RUN MODEL ON ONE IMAGE
+
 def run_model_on_image(model, original_img, device, threshold=500):
     original_w, original_h = original_img.size
 
@@ -140,18 +138,9 @@ def run_model_on_image(model, original_img, device, threshold=500):
     return result, detected_pixels, inference_time, fps, overlay_img, mask_img
 
 
-# Calculate Luminance Contrast
-# Calculate Luminance Contrast
+# CALCULATE LUMINANCE CONTRAST
+
 def calculate_luminance_contrast(original_img, mask_img):
-    """
-    Calculates approximate luminance contrast between:
-    1. Raised tactile indicators inside the detected tactile region
-    2. Surrounding non-tactile floor area
-
-    It checks both dark and light tactile indicators, then uses the one
-    with the stronger contrast.
-    """
-
     img_np = np.array(original_img).astype(np.float32)
     mask_np = np.array(mask_img)
 
@@ -171,19 +160,25 @@ def calculate_luminance_contrast(original_img, mask_img):
     luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
 
     tactile_luminance_values = luminance[tactile_mask]
-
     surrounding_luminance = np.mean(luminance[surrounding_mask])
 
-    # Dark raised indicators candidate
     dark_threshold = np.percentile(tactile_luminance_values, 25)
     dark_tactile_mask = tactile_mask & (luminance <= dark_threshold)
 
-    # Light raised indicators candidate
     light_threshold = np.percentile(tactile_luminance_values, 75)
     light_tactile_mask = tactile_mask & (luminance >= light_threshold)
 
-    dark_luminance = np.mean(luminance[dark_tactile_mask]) if np.sum(dark_tactile_mask) > 0 else 0.0
-    light_luminance = np.mean(luminance[light_tactile_mask]) if np.sum(light_tactile_mask) > 0 else 0.0
+    dark_luminance = (
+        np.mean(luminance[dark_tactile_mask])
+        if np.sum(dark_tactile_mask) > 0
+        else 0.0
+    )
+
+    light_luminance = (
+        np.mean(luminance[light_tactile_mask])
+        if np.sum(light_tactile_mask) > 0
+        else 0.0
+    )
 
     def contrast(lum1, lum2):
         lighter = max(lum1, lum2)
@@ -207,19 +202,9 @@ def calculate_luminance_contrast(original_img, mask_img):
     return contrast_percentage, tactile_luminance, surrounding_luminance
 
 
-# DSAPT Contrast Compatibility
+# DSAPT COMPATIBILITY
+
 def get_dsapt_compatibility(result, contrast_percentage):
-    """
-    Converts luminance contrast into DSAPT compatibility score.
-
-    Score logic:
-    No tactile flooring detected = 0%
-    Contrast < 30% = 0%
-    Contrast 30% to 44.99% = 50%
-    Contrast 45% to 59.99% = 75%
-    Contrast >= 60% = 100%
-    """
-
     if result == "No":
         compatibility_score = 0
         compatibility_label = "Not assessed"
@@ -272,11 +257,17 @@ def get_dsapt_compatibility(result, contrast_percentage):
     return compatibility_score, compatibility_label, notes
 
 
-# PDF Report Generation
-def pdf_report(input_image, processed_image, accessibility_feature,
-               dsapt_compliance_score, notes,
-               output_path="output_report.pdf", template_path="Report_Template.pdf"):
+# PDF REPORT GENERATION
 
+def pdf_report(
+    input_image,
+    processed_image,
+    accessibility_feature,
+    dsapt_compliance_score,
+    notes,
+    output_path,
+    template_path
+):
     import io
     from reportlab.pdfgen import canvas
     from reportlab.lib.utils import ImageReader
@@ -284,8 +275,6 @@ def pdf_report(input_image, processed_image, accessibility_feature,
 
     PAGE_W, PAGE_H = 612, 792
 
-    # Convert input to PIL Image
-    # Accepts file path, PIL Image, or numpy array
     def to_pil(img_input):
         if isinstance(img_input, np.ndarray):
             return Image.fromarray(img_input.astype(np.uint8)).convert("RGB")
@@ -339,29 +328,24 @@ def pdf_report(input_image, processed_image, accessibility_feature,
     packet = io.BytesIO()
     c = canvas.Canvas(packet, pagesize=(PAGE_W, PAGE_H))
 
-    # 1. Date
     c.setFont("Helvetica", 11)
     c.drawString(205.33, 465.15, datetime.now().strftime("%d/%m/%Y"))
 
-    # 2. Input image
     pil_in = to_pil(input_image)
     if pil_in:
         draw_image_in_cell(c, pil_in, 205.33, 360, 540 - 205.33, 100)
 
-    # 3. Accessibility feature detected
     c.setFont("Helvetica", 11)
     c.drawString(ACCESSIBILITY_FEATURE_X, ACCESSIBILITY_FEATURE_Y, accessibility_feature)
 
-    # 4. Processed/output image
     pil_out = to_pil(processed_image)
     if pil_out:
         draw_image_in_cell(c, pil_out, 205.33, 226, 540 - 205.33, 100)
 
-    # 5. DSAPT compatibility score
     c.setFont("Helvetica", 11)
     c.drawString(205.33, 210.58, f"{dsapt_compliance_score}%")
 
-    # 6. Notes
+    c.setFont("Helvetica", 10)
     draw_wrapped_text(c, notes, 205.33, 185.55, 290, "Helvetica", 10, 12)
 
     c.save()
@@ -376,7 +360,8 @@ def pdf_report(input_image, processed_image, accessibility_feature,
     return output_path
 
 
-# Process Image Input
+# PROCESS IMAGE
+
 def process_image(image_path, model, device, threshold=500):
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image not found: {image_path}")
@@ -390,20 +375,19 @@ def process_image(image_path, model, device, threshold=500):
         threshold=threshold
     )
 
-    print("Input type: Image")
-    print(f"Detected pixels: {detected_pixels}")
-    print(f"Tactile flooring detected: {result}")
-
-    
-
     return original_img, overlay_img, mask_img, result, detected_pixels, inference_time, fps
 
 
-# Process Video Input
+# PROCESS VIDEO
 
-def process_video(video_path, model, device, threshold=500,
-                  frame_interval_seconds=1, max_video_seconds=10):
-
+def process_video(
+    video_path,
+    model,
+    device,
+    threshold=500,
+    frame_interval_seconds=1,
+    max_video_seconds=10
+):
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video not found: {video_path}")
 
@@ -415,13 +399,6 @@ def process_video(video_path, model, device, threshold=500,
     video_fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     video_duration = total_frames / video_fps if video_fps > 0 else 0
-
-    print("Input type: Video")
-    print(f"Video duration: {video_duration:.2f} seconds")
-
-    if video_duration > max_video_seconds:
-        print(f"Warning: The video is longer than {max_video_seconds} seconds.")
-        print("Only selected frames from the video will be checked.")
 
     frame_step = int(video_fps * frame_interval_seconds)
 
@@ -437,7 +414,6 @@ def process_video(video_path, model, device, threshold=500,
         if not ret:
             break
 
-        # Only check frames at selected intervals
         if frame_number % frame_step == 0:
             quality_score = get_frame_quality_score(frame)
 
@@ -453,15 +429,12 @@ def process_video(video_path, model, device, threshold=500,
     cap.release()
 
     if len(selected_frames) == 0:
-        print("No good-quality frames were found.")
-        return None, None, None, None, None, None, None
+        raise ValueError("No good-quality frames were found in the video.")
 
-    # Choose the best frame based on brightness and sharpness
     best_frame_info = max(selected_frames, key=lambda x: x["quality_score"])
     best_frame = best_frame_info["frame"]
     best_frame_number = best_frame_info["frame_number"]
 
-    # Convert OpenCV BGR frame to RGB PIL image
     best_frame_rgb = cv2.cvtColor(best_frame, cv2.COLOR_BGR2RGB)
     best_pil_img = Image.fromarray(best_frame_rgb)
 
@@ -472,18 +445,19 @@ def process_video(video_path, model, device, threshold=500,
         threshold=threshold
     )
 
-    print(f"Checked frames: {len(selected_frames)}")
-    print(f"Best frame number: {best_frame_number}")
-    print(f"Best frame quality score: {best_frame_info['quality_score']:.2f}")
-    print(f"Detected pixels: {detected_pixels}")
-    print(f"Tactile flooring detected: {result}")
+    video_info = {
+        "video_duration": round(float(video_duration), 2),
+        "checked_frames": len(selected_frames),
+        "best_frame_number": int(best_frame_number),
+        "best_frame_quality_score": round(float(best_frame_info["quality_score"]), 2),
+        "video_warning": video_duration > max_video_seconds
+    }
 
-    
-
-    return best_pil_img, overlay_img, mask_img, result, detected_pixels, inference_time, fps
+    return best_pil_img, overlay_img, mask_img, result, detected_pixels, inference_time, fps, video_info
 
 
-# Detect Input Type
+# FILE TYPE CHECK
+
 def is_image_file(file_path):
     image_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"]
     ext = os.path.splitext(file_path)[1].lower()
@@ -498,12 +472,20 @@ def is_video_file(file_path):
     return ext in video_extensions
 
 
-# Main Function
-def main():
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# MAIN FUNCTION FOR BACKEND
 
-    if not os.path.exists(INPUT_PATH):
-        raise FileNotFoundError(f"Input file not found: {INPUT_PATH}")
+def run_model(input_path):
+    """
+    This is the function that main.py should call.
+
+    Example from main.py:
+        result = run_model(file_path)
+
+    input_path comes from the uploaded file.
+    """
+
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(f"Input file not found: {input_path}")
 
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
@@ -511,19 +493,28 @@ def main():
     if not os.path.exists(TEMPLATE_PATH):
         raise FileNotFoundError(f"PDF template not found: {TEMPLATE_PATH}")
 
+    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = load_model(MODEL_PATH, device)
 
-    if is_image_file(INPUT_PATH):
+    video_info = None
+
+    if is_image_file(input_path):
+        input_type = "Image"
+
         original_img, overlay_img, mask_img, result, detected_pixels, inference_time, fps = process_image(
-            image_path=INPUT_PATH,
+            image_path=input_path,
             model=model,
             device=device,
             threshold=THRESHOLD
         )
 
-    elif is_video_file(INPUT_PATH):
-        original_img, overlay_img, mask_img, result, detected_pixels, inference_time, fps = process_video(
-            video_path=INPUT_PATH,
+    elif is_video_file(input_path):
+        input_type = "Video"
+
+        original_img, overlay_img, mask_img, result, detected_pixels, inference_time, fps, video_info = process_video(
+            video_path=input_path,
             model=model,
             device=device,
             threshold=THRESHOLD,
@@ -531,49 +522,65 @@ def main():
             max_video_seconds=MAX_VIDEO_SECONDS
         )
 
-        if original_img is None:
-            print("PDF report was not generated because no good-quality frame was found.")
-            return
-
     else:
-        raise ValueError("Unsupported file type. Please use an image or video file.")
+        raise ValueError("Unsupported file type. Please upload an image or video file.")
 
-    # Accessibility Feature
     if result == "Yes":
         accessibility_feature = "Accessibility Feature Detected: Tactile flooring"
     else:
         accessibility_feature = "No Accessibility Feature Detected"
 
-    # DSAPT Contrast-Based Report Values
     contrast_percentage, tactile_luminance, surrounding_luminance = calculate_luminance_contrast(
-    original_img, mask_img)
+        original_img,
+        mask_img
+    )
 
     dsapt_compliance_score, dsapt_compatibility_label, notes = get_dsapt_compatibility(
         result=result,
         contrast_percentage=contrast_percentage
     )
 
-    
-    print(f"Tactile area luminance: {tactile_luminance:.2f}")
-    print(f"Surrounding area luminance: {surrounding_luminance:.2f}")
-    print(f"Estimated luminance contrast: {contrast_percentage:.2f}%")
-    print(f"DSAPT compatibility score: {dsapt_compliance_score}%")
-    print(f"DSAPT compatibility label: {dsapt_compatibility_label}")
-    
+    report_filename = f"analysis_report_{uuid.uuid4().hex}.pdf"
+    report_path = os.path.join(OUTPUT_FOLDER, report_filename)
 
-    # Generate PDF Report
-    report_path = pdf_report(
+    pdf_report(
         input_image=original_img,
         processed_image=overlay_img,
         accessibility_feature=accessibility_feature,
         dsapt_compliance_score=dsapt_compliance_score,
         notes=notes,
-        output_path=OUTPUT_PDF_PATH,
+        output_path=report_path,
         template_path=TEMPLATE_PATH
     )
 
-    print(f"PDF report generated successfully: {report_path}")
+    response = {
+        "message": "Analysis completed successfully",
+        "input_type": input_type,
+        "tactile_detected": result,
+        "detected_pixels": int(detected_pixels),
+        "inference_time_seconds": round(float(inference_time), 4),
+        "fps": round(float(fps), 2),
+        "contrast_percentage": round(float(contrast_percentage), 2),
+        "tactile_luminance": round(float(tactile_luminance), 2),
+        "surrounding_luminance": round(float(surrounding_luminance), 2),
+        "dsapt_compliance_score": int(dsapt_compliance_score),
+        "dsapt_compatibility_label": dsapt_compatibility_label,
+        "notes": notes,
+        "report_filename": report_filename,
+        "report_path": report_path
+    }
 
+    if video_info is not None:
+        response["video_info"] = video_info
+
+    return response
+
+
+# OPTIONAL LOCAL TEST
 
 if __name__ == "__main__":
-    main()
+    test_input = "test1.jpg"
+
+    result = run_model(test_input)
+
+    print(result)
