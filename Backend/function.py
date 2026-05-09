@@ -16,7 +16,7 @@ from src import GRFBUNet
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-MODEL_PATH = os.path.join(BASE_DIR, "model", "model.pth")
+MODEL_PATH = os.path.join(BASE_DIR, "Model", "model.pth")
 TEMPLATE_PATH = os.path.join(BASE_DIR, "report_template.pdf")
 OUTPUT_FOLDER = os.path.join(BASE_DIR, "outputs")
 
